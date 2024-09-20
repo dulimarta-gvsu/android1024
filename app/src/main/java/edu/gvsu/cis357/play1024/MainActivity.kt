@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,7 +44,8 @@ class MainActivity : ComponentActivity() {
             Play1024Theme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Game1024(
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier.padding(innerPadding),
+                        vm = GameViewModel()
                     )
                 }
             }
@@ -50,43 +53,50 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-suspend fun handleSwipe(scope: PointerInputScope, whenDetected: (Swipe) -> Unit) {
+suspend fun handleSwipe(scope: PointerInputScope, iAmSwiped: (Swipe) -> Unit) {
     scope.run {
         var totalDragX = 0f
         var totalDragY = 0f
         detectDragGestures(
             onDragStart = {
+                // reset total run to zero
                 totalDragX = 0f
                 totalDragY = 0f
             },
             onDrag = { change, dragAmout ->
                 change.consume()
+                // Accumulate both x and y distances
                 totalDragX += dragAmout.x
                 totalDragY += dragAmout.y
             },
             onDragEnd = {
+                // Which direction has the larger magnitude?
                 val dir =
                     if (totalDragX.absoluteValue > totalDragY.absoluteValue) {
+                        // Horizontal swipe
                         if (totalDragX > 0) Swipe.RIGHT else Swipe.LEFT
                     } else {
+                        // Vertical swipe
                         if (totalDragY > 0) Swipe.DOWN else Swipe.UP
                     }
-                whenDetected(dir)
+                iAmSwiped(dir) // Call the lambda
             },
         )
     }
 }
 
 @Composable
-fun Game1024(modifier: Modifier = Modifier) {
+fun Game1024(modifier: Modifier = Modifier, vm: GameViewModel) {
     var swipeDirection by remember { mutableStateOf<Swipe?>(null) }
+    val cellValues = vm.numbers.observeAsState()
     Column(
         modifier
-            .padding(top = 16.dp)
+            .padding(16.dp)
             .pointerInput(Unit) {
-                val which = handleSwipe(this) {
+                handleSwipe(this) {
                     println("Swipe to $it")
                     swipeDirection = it
+                    vm.doSwipe(it)
                 }
             })
     {
@@ -94,24 +104,25 @@ fun Game1024(modifier: Modifier = Modifier) {
             "Welcome to <YourName> 1024",
             fontSize = 20.sp
         )
-        NumberGrid(4)
+        NumberGrid(size = 4, cells = cellValues.value)
         Text(
             "You swipe ${swipeDirection ?: "Unknown"}",
             fontSize = 18.sp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
     }
-
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun NumberGrid(size: Int = 4, modifier: Modifier = Modifier) {
-    val cells = (1..size * size).toList()
-    FlowRow(maxItemsInEachRow = size, modifier = modifier.padding(16.dp)) {
-        cells.forEach {
+fun NumberGrid(modifier: Modifier = Modifier, size: Int = 4, cells: List<String>?) {
+    val numbersToShow = cells ?:
+    // Generate a list 1,2,3, ..., N*N, then convert each to "."
+    (1..size*size).map { "." }
+    FlowRow(maxItemsInEachRow = size, modifier = modifier) {
+        numbersToShow.forEach {
             Text(
-                it.toString(),
+                it /*.toString()*/,
                 textAlign = TextAlign.Center,
                 fontSize = 30.sp,
                 modifier = Modifier
@@ -128,6 +139,6 @@ fun NumberGrid(size: Int = 4, modifier: Modifier = Modifier) {
 @Composable
 fun GreetingPreview() {
     Play1024Theme {
-        Game1024()
+        Game1024(vm = GameViewModel())
     }
 }
